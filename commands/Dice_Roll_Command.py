@@ -1,50 +1,87 @@
 import re
 import discord
-from dice import rol_dices
+from dice import roll_dices_string
+from Advantage import Advantage
 
 class Dice_Roll_Command:
-  regex_command = re.compile("^\s*[+-]?\s*\d*d[1-9]\d*(\s*[+-]?\s*\d*d[1-9]\d*|\s*[+-]\s*\d+)*\s*$", flags=re.IGNORECASE)
-  regex_rolls = re.compile("([+-]?)(\d*)(d([1-9]\d*))?")
+  regex_command = re.compile("^\s*[+-]?\s*\d*d[1-9]\d*(\s*[+-]?\s*\d*d[1-9]\d*|\s*[+-]\s*\d+)*\s*(a[dvantage]{0,8}|d[isadvantage]{0,11})?\s*$", flags=re.IGNORECASE)
 
   def get_regex():
     return Dice_Roll_Command.regex_command
 
-  async def execute_command(message: discord.Message):
-    roll_string = Dice_Roll_Command.remove_whitespace(message.content).lower()
-    print(roll_string)
-    
-    if Dice_Roll_Command.is_small_dice_roll(roll_string):
-      await message.channel.send('rolling '+ roll_string +': **' + Dice_Roll_Command.roll_dices_string(roll_string) + '** by ' + message.author.display_name)
-    else:
-      await message.channel.send('big boy roll by '+ message.author.display_name)
-      await message.channel.send(Dice_Roll_Command.roll_dices_string(roll_string))
+  async def execute_command(message: discord.Message) -> None:
+    roll_string_with_advantage = Dice_Roll_Command.remove_whitespace(message.content).lower()
+    advantage = Dice_Roll_Command.getAdvantage(roll_string_with_advantage)
+    print(advantage)
+    roll_string = Dice_Roll_Command.remove_advantage(roll_string_with_advantage)
 
-  def remove_whitespace(s: str):
+    if advantage == Advantage.NONE:
+      await Dice_Roll_Command.roll_no_advantage(message, roll_string)
+    elif advantage == Advantage.ADVANTAGE:
+      await Dice_Roll_Command.roll_with_advantage(message, roll_string)
+    elif advantage == Advantage.DISADVANTAGE:
+      await Dice_Roll_Command.roll_with_disadvantage(message, roll_string)
+
+  async def roll_no_advantage(message: discord.Message, roll_string) -> None:
+    result: str = str(roll_dices_string(roll_string))
+
+    shortMessage = 'rolling '+ roll_string +' by *' + message.author.display_name + "*\n**" + result + "**"
+
+    if Dice_Roll_Command.has_allowed_message_size(shortMessage):
+      await message.channel.send(shortMessage)
+    else:
+      await message.channel.send('big boy roll by *'+ message.author.display_name + "*")
+      await message.channel.send(result)
+
+  async def roll_with_advantage(message: discord.Message, roll_string) -> None:
+    
+    firstRoll: int = roll_dices_string(roll_string)
+    secondRoll: int = roll_dices_string(roll_string)
+
+    if firstRoll >= secondRoll:
+      result = "**" + str(firstRoll) + "** : "+str(secondRoll)
+    else:
+      result = str(firstRoll) + " : **"+str(secondRoll)+"**" 
+
+    shortMessage = 'rolling '+ roll_string +' with advantage by *' + message.author.display_name + '*\n' + result
+    if Dice_Roll_Command.has_allowed_message_size(shortMessage):
+      await message.channel.send(shortMessage)
+    else:
+      await message.channel.send('big boy roll with advantage by *'+ message.author.display_name + "*")
+      await message.channel.send(max(firstRoll, secondRoll))
+
+  async def roll_with_disadvantage(message: discord.Message, roll_string) -> None:
+    
+    firstRoll: int = roll_dices_string(roll_string)
+    secondRoll: int = roll_dices_string(roll_string)
+
+    if firstRoll < secondRoll:
+      result = "**" + str(firstRoll) + "** : "+str(secondRoll)
+    else:
+      result = str(firstRoll) + " : **"+str(secondRoll)+"**" 
+
+    shortMessage = 'rolling '+ roll_string +' with disadvantage by *' + message.author.display_name + '*\n' + result
+    if Dice_Roll_Command.has_allowed_message_size(shortMessage):
+      await message.channel.send(shortMessage)
+    else:
+      await message.channel.send('big boy roll with disadvantage by *'+ message.author.display_name + "*")
+      await message.channel.send(min(firstRoll, secondRoll))
+
+  def remove_advantage(roll_string_with_advantage: str) -> str:
+    match = re.search("(a[dvantage]{0,8}|d[isadvantage]{0,11})?\s*$", roll_string_with_advantage)
+    return roll_string_with_advantage[:match.start()]
+
+  def remove_whitespace(s: str) -> str:
     regex_whitespace = re.compile(r'\s+')
     return re.sub(regex_whitespace, '', s)
 
-  def roll_dices_string(dices_string : str):
-    result = 0
-    operations = re.findall(Dice_Roll_Command.regex_rolls, dices_string)
-    for operation in operations:
-      result += Dice_Roll_Command.calc_dice_operation(operation)
-    return str(result)
+  def getAdvantage(roll_string_with_advantage: str) -> Advantage:
+    if bool(re.search("\da[dvantage]{0,8}$", roll_string_with_advantage)):
+      return Advantage.ADVANTAGE
+    elif bool(re.search("\dd[isadvantage]{0,11}$", roll_string_with_advantage)):
+      return Advantage.DISADVANTAGE
+    else:
+      return Advantage.NONE
 
-  def calc_dice_operation(parts : tuple):
-    value = 0
-    sign = 1 if parts[0] != '-' else -1
-    print(parts)
-
-    if parts[2] != '':
-      times = int(parts[1]) if parts[1] != '' else 1
-      sides = int(parts[3])
-      value += rol_dices(times, sides)
-    elif parts[1] != '':
-      value = int(parts[1])
-
-    return sign * value
-
-  def is_small_dice_roll(roll_string: str):
-    text_size = 8 + 4 + 6
-    max_display_name_size = 32
-    return len(roll_string) * 2 + text_size + max_display_name_size <= 2000
+  def has_allowed_message_size(message: str):
+    return len(message) <= 2000

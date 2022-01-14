@@ -8,12 +8,13 @@ regex_rolls = re.compile("([+-]?)(\d*)(d([1-9]\d*))?")
 
 def roll_dices_string(dices_string : str):
   result = 0
+  all_rolls = []
   operations = re.findall(regex_rolls, dices_string)
   for operation in operations:
-    result += calc_dice_operation(operation)
-  return result
+    result += calc_dice_operation(operation, all_rolls)
+  return result, all_rolls
 
-def calc_dice_operation(parts : tuple):
+def calc_dice_operation(parts : tuple, all_rolls: list):
   value = 0
   sign = 1 if parts[0] != '-' else -1
   print(parts)
@@ -21,7 +22,9 @@ def calc_dice_operation(parts : tuple):
   if parts[2] != '':
     times = int(parts[1]) if parts[1] != '' else 1
     sides = int(parts[3])
-    value += rol_dices(times, sides)
+    roll_results = rol_dices(times, sides)
+    value = sum(roll_results)
+    all_rolls.extend(roll_results)
   elif parts[1] != '':
     value = int(parts[1])
 
@@ -29,14 +32,14 @@ def calc_dice_operation(parts : tuple):
 
 
 def rol_dices(times: int, sides: int):
-  result = 0
+  results = []
 
   if times < 1000:
     for roll in range(times):
-      result += roll_dice(sides)
+      results.append(roll_dice(sides))
   else:
-    result = approximate_roll(times, sides)
-  return result
+    results.append(approximate_roll(times, sides))
+  return results
 
 
 def roll_dice(sides: int):
